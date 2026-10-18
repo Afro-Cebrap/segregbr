@@ -73,7 +73,6 @@ t1_map <- df_segreg |>
   mutate(valid_tract = if_else(is.na(unit_type),"NotValid","Valid")) |> 
   select(year, code_tract, zone, code_state, abbrev_state,name_state,valid_tract)
 
-
 # 2. Missing information on population size by race -----------------------
 # valid census tract
 
@@ -393,6 +392,7 @@ t4_map <- df_segreg |>
   ) |> 
   select(year, code_tract, zone, code_state, abbrev_state,name_state, heterogeneity_index)
 
+rm(t4_df)
   
 # Exporting outputs -------------------------------------------------------
 
