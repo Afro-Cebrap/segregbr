@@ -14,7 +14,7 @@ library(arrow) # For reading and writing data in Parquet format
 library(sfarrow) # For reading and writing spatial data in Parquet format
 
 # Custom functions to calculate segregation indices
-source(here::here("estudos","avaliacao_dados","codigo","utils_analysis.R"))
+source(here::here("reports","avaliacao_dados","codigo","utils_analysis.R"))
 
 # 1. Inputs ---------------------------------------------------------------
 

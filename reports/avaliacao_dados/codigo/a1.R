@@ -14,7 +14,7 @@ library(arrow) # For reading and writing data in Parquet format
 library(sfarrow) # For reading and writing spatial data in Parquet format
 
 # Custom functions to calculate segregation indices
-source(here::here("estudos","avaliacao_dados","codigo","utils_analysis.R"))
+source(here::here("reports","avaliacao_dados","codigo","utils_analysis.R"))
 
 # 1. Inputs ---------------------------------------------------------------
 
@@ -72,6 +72,14 @@ t1_map <- df_segreg |>
   filter(is.na(unit_type) | unit_type == "muni") |> 
   mutate(valid_tract = if_else(is.na(unit_type),"NotValid","Valid")) |> 
   select(year, code_tract, zone, code_state, abbrev_state,name_state,valid_tract)
+
+# table with assessment indicators
+
+t1_eval <- df_segreg |> 
+  st_drop_geometry() |> 
+  filter(is.na(unit_type) | unit_type == "muni") |> 
+  mutate(valid_tract = if_else(is.na(unit_type),"NotValid","Valid")) |> 
+  select(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state, valid_tract)
 
 # 2. Missing information on population size by race -----------------------
 # valid census tract
@@ -288,6 +296,20 @@ t2_map <- df_segreg |>
   ) |> 
   select(year, code_tract, zone, code_state, abbrev_state,name_state, starts_with("missing_"))
 
+# data for assessing estimates
+
+t2_eval <- df_segreg |>
+  st_drop_geometry() |> 
+  filter(unit_type == "muni") |> 
+  mutate(
+    missing_branca = if_else(n_branca == 0,1,0),
+    missing_parda = if_else(n_branca == 0,1,0),
+    missing_preta = if_else(n_branca == 0,1,0),
+    missing_indigena = if_else(n_branca == 0,1,0),
+    missing_amarela = if_else(n_branca == 0,1,0)
+  ) |> 
+  select(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state, starts_with("missing_"))
+
 
 # 3. Population size by tract for the subgroup with smaller size ---------
 # This indicators gives to us a sense of which subgroup is the one with smaller pop. size
@@ -327,7 +349,6 @@ t3_uf <- t3_df |>
 # data for map
 
 t3_map <- df_segreg |> 
-  st_drop_geometry() |> 
   filter(unit_type == "muni") |> 
   # attributing high values for zero population subgroups (artifact strategy to avoid them to be included)
   mutate(across(c(n_branca:n_indigena), na_if, 0)) |> 
@@ -341,6 +362,24 @@ t3_map <- df_segreg |>
                                   minval == n_indigena ~ "Indígena"),
          minval_prop = minval / n_total * 100) |> 
   select(year, code_tract, zone, code_state, abbrev_state,name_state, starts_with("minval_"))
+
+# data for assessment indicators
+
+t3_eval <- df_segreg |> 
+  st_drop_geometry() |> 
+  filter(unit_type == "muni") |> 
+  # attributing high values for zero population subgroups (artifact strategy to avoid them to be included)
+  mutate(across(c(n_branca:n_indigena), na_if, 0)) |> 
+  mutate(minval = pmap(across(one_of(racial_groups)), ~min(c(...), na.rm = TRUE)),
+         minval = as.numeric(minval)) |> 
+  # link minimum value to the group
+  mutate(minval_label = case_when(minval == n_branca ~ "Branca",
+                                  minval == n_preta ~ "Preta",
+                                  minval == n_parda ~ "Parda",
+                                  minval == n_amarela ~ "Amarela",
+                                  minval == n_indigena ~ "Indígena"),
+         minval_prop = minval / n_total * 100) |> 
+  select(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state, starts_with("minval_"))
 
 rm(t3_df)
 
@@ -379,7 +418,6 @@ t4_uf <- t4_df |>
 # data for map
 
 t4_map <- df_segreg |> 
-  st_drop_geometry() |> 
   filter(unit_type == "muni") |> 
   # attributing high values for zero population subgroups (artifact strategy to avoid them to be included)
   mutate(
@@ -392,8 +430,40 @@ t4_map <- df_segreg |>
   ) |> 
   select(year, code_tract, zone, code_state, abbrev_state,name_state, heterogeneity_index)
 
+# data for assessment groups
+
+t4_eval <- df_segreg |> 
+  st_drop_geometry() |> 
+  filter(unit_type == "muni") |> 
+  # attributing high values for zero population subgroups (artifact strategy to avoid them to be included)
+  mutate(
+    tem_branca = if_else(n_branca == 0, 0,1),
+    tem_preta = if_else(n_preta == 0, 0,1),
+    tem_parda = if_else(n_parda == 0, 0,1),
+    tem_amarela = if_else(n_amarela == 0, 0,1),
+    tem_indigena = if_else(n_indigena == 0, 0,1),
+    heterogeneity_index = tem_branca + tem_preta + tem_parda + tem_amarela + tem_indigena
+  ) |> 
+  select(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state, heterogeneity_index)
+
 rm(t4_df)
   
 # Exporting outputs -------------------------------------------------------
 
+# output of evaluation indicators
+t_eval <- t1_eval |> 
+  left_join(
+    t2_eval,
+    by = join_by(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state)
+  ) |> 
+  left_join(
+    t3_eval,
+    by = join_by(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state)
+  ) |>
+  left_join(
+    t4_eval,
+    by = join_by(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state)
+  )
 
+# export table with indicators
+write_parquet(t_eval,here::here("reports","avaliacao_dados","A. Validade Interna","indicadores_por_muni.parquet"))
