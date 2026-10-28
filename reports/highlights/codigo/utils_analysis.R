@@ -148,31 +148,3 @@ compute_lisa <- function(data, w = "queen"){
   
   return(data)
 }
-
-# Compute Moran I ------------------------------------------------------------
-
-compute_moran <- function(data, w = "queen"){
-  
-  # Settings for neighborhood polygons with missing neighbors
-  
-  # set.ZeroPolicyOption(TRUE)
-  get.ZeroPolicyOption()
-  
-  data <- data |>
-    filter(!st_is_empty(data)) # excluding missing values
-  
-  # Neighborhood matrix
-  
-  if(w == "queen"){
-    queen_w <- nb2listw(poly2nb(data), style = "W", zero.policy = TRUE)
-  }
-  
-  # compute moran's I
-  moran_test <- tibble(
-    Moran_value = moran.test(data$dissimilarity, queen_w)[[3]][[1]],
-    Moran_pvalue = round(moran.test(data$data, queen_w)[[2]],4)
-  )
-  
-  return(moran_test)
-  
-}
