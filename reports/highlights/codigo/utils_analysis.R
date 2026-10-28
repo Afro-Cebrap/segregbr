@@ -107,3 +107,72 @@ prepare_data <- function(state_br, tracts_br, year) {
   
   return(tracts_segreg)
 }
+
+# Compute Spatial clusters -------------------------------------------------
+
+compute_lisa <- function(data, w = "queen"){
+  
+  # settings for LISA
+  get.ZeroPolicyOption()
+  
+  data <- data |>
+    filter(!st_is_empty(data)) # excluding missing data
+  
+  # Neighborhood matrix
+  if(w == "queen"){
+    data_w <- queen_weights(data, include_lower_order = TRUE)
+  }
+  
+  # compute LISA
+  
+  lisa <- local_moran(data_w, data["dissimilarity"])
+  
+  data <- data |>
+    mutate(
+      LISA_value = lisa_values(gda_lisa = lisa),
+      LISA_pvalue = lisa_pvalues(gda_lisa = lisa),
+      LISA_standardized = case_when(
+        LISA_pvalue >  0.1 ~ 0,
+        (LISA_value - mean(LISA_value)) > 0 & (dissimilarity - mean(dissimilarity)) > 0 ~ 4,
+        (LISA_value - mean(LISA_value)) > 0 & (dissimilarity - mean(dissimilarity)) < 0 ~ 1,
+        (LISA_value - mean(LISA_value)) < 0 & (dissimilarity - mean(dissimilarity)) > 0 ~ 3,
+        (LISA_value - mean(LISA_value)) < 0 & (dissimilarity - mean(dissimilarity)) < 0 ~ 2,
+        TRUE ~ NA_real_
+      ),
+      LISA_map = factor(
+        LISA_standardized,
+        levels = c(2,1,3,4,0),
+        labels = c("Baixo-Baixo","Alto-Baixo","Baixo-Alto","Alto-Alto","Não significativo")
+      )
+    )
+  
+  return(data)
+}
+
+# Compute Moran I ------------------------------------------------------------
+
+compute_moran <- function(data, w = "queen"){
+  
+  # Settings for neighborhood polygons with missing neighbors
+  
+  # set.ZeroPolicyOption(TRUE)
+  get.ZeroPolicyOption()
+  
+  data <- data |>
+    filter(!st_is_empty(data)) # excluding missing values
+  
+  # Neighborhood matrix
+  
+  if(w == "queen"){
+    queen_w <- nb2listw(poly2nb(data), style = "W", zero.policy = TRUE)
+  }
+  
+  # compute moran's I
+  moran_test <- tibble(
+    Moran_value = moran.test(data$dissimilarity, queen_w)[[3]][[1]],
+    Moran_pvalue = round(moran.test(data$data, queen_w)[[2]],4)
+  )
+  
+  return(moran_test)
+  
+}
