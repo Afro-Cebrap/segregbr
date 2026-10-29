@@ -52,7 +52,7 @@ aux_metro <- segreg_metro |>
 aux_munic <- segreg_munic |> 
   st_drop_geometry() |> 
   filter(year == 2022, code_tract != "Total") |> 
-  select(name_region, name_state, name_muni, code_muni) |> distinct()
+  select(name_region, name_state, name_muni,name_metro, code_muni, n_total) |> distinct()
 
 # data with auxiliar indicators from assessment
 
@@ -81,7 +81,8 @@ t1 <- segreg_metro |>
 ###
 # 2.1 - Municipalities most and lest segregated
 ###
-# Note: excluding municipalities with less than 3 racial categories, with more than one census tract, and with low Variance Coefficient
+# Note: excluding municipalities with less than 3 racial categories, with more than one census tract,
+# and with low Variance Coefficient
 
 t2_1 <- segreg_munic |> 
   st_drop_geometry() |> 
@@ -154,8 +155,48 @@ t2_2 |>
 # 2.3. Neighbors with the highest spatial segregation
 ####
 
+# creating auxiliar for capitals
 
+aux_capital <- aux_munic |> 
+  reframe(
+    n_total = sum(n_total),
+    .by = c(name_state, code_muni)
+  ) |> 
+  arrange(name_state, desc(n_total)) |> 
+  mutate(order = row_number(),
+         .by = c(name_state)) |> 
+  filter(order == 1) |> 
+  select(-order, -n_total, -name_state)
 
+# choosing capitals
+
+capitals <- t2_1 |> 
+  right_join(
+    aux_capital,
+    by = join_by(code_muni)
+  )
+
+# filter tracts from chosen municipalities
+
+t2_3 <- segreg_munic |> 
+  st_drop_geometry() |> 
+  filter(year == 2022, code_tract != "Total", unit_type == "muni") |> 
+  select(code_tract, code_muni, name_muni, name_state, name_region,name_neighborhood, dissimilarity) |> 
+  right_join(
+    capitals |> select("dissimilarity_muni" = dissimilarity, code_muni),
+    by = join_by(code_muni)
+  ) |> 
+  filter(!is.na(name_neighborhood)) |> 
+  arrange(code_muni, desc(dissimilarity)) |> 
+  mutate(
+    order = row_number(),
+    .by = c(code_muni)
+  ) |> 
+  filter(order == 1) |> 
+  select(-order) |> 
+  arrange(desc(dissimilarity_muni))
+
+rm(capitals,aux_capital)
 
 # 3. Potential racial interaction -----------------------------------------
 
