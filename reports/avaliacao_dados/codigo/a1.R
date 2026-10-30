@@ -289,10 +289,10 @@ t2_map <- df_segreg |>
   filter(unit_type == "muni") |> 
   mutate(
     missing_branca = if_else(n_branca == 0,1,0),
-    missing_parda = if_else(n_branca == 0,1,0),
-    missing_preta = if_else(n_branca == 0,1,0),
-    missing_indigena = if_else(n_branca == 0,1,0),
-    missing_amarela = if_else(n_branca == 0,1,0)
+    missing_parda = if_else(n_parda == 0,1,0),
+    missing_preta = if_else(n_preta == 0,1,0),
+    missing_indigena = if_else(n_indigena == 0,1,0),
+    missing_amarela = if_else(n_amarela == 0,1,0)
   ) |> 
   select(year, code_tract, zone, code_state, abbrev_state,name_state, starts_with("missing_"))
 
@@ -303,10 +303,10 @@ t2_eval <- df_segreg |>
   filter(unit_type == "muni") |> 
   mutate(
     missing_branca = if_else(n_branca == 0,1,0),
-    missing_parda = if_else(n_branca == 0,1,0),
-    missing_preta = if_else(n_branca == 0,1,0),
-    missing_indigena = if_else(n_branca == 0,1,0),
-    missing_amarela = if_else(n_branca == 0,1,0)
+    missing_parda = if_else(n_parda == 0,1,0),
+    missing_preta = if_else(n_preta == 0,1,0),
+    missing_indigena = if_else(n_indigena == 0,1,0),
+    missing_amarela = if_else(n_amarela == 0,1,0)
   ) |> 
   select(year, code_muni, name_metro, code_tract, zone, code_state, abbrev_state,name_state, starts_with("missing_"))
 
