@@ -49,6 +49,11 @@ aux_metro <- segreg_metro |>
   filter(year == 2022, code_tract != "Total") |> 
   select(name_region, name_state, name_metro) |> distinct()
 
+aux_metro_complete <- segreg_metro |> 
+  st_drop_geometry() |> 
+  filter(code_tract != "Total") |> 
+  select(name_region, name_state, name_metro) |> distinct()
+
 aux_munic <- segreg_munic |> 
   st_drop_geometry() |> 
   filter(year == 2022, code_tract != "Total") |> 
@@ -353,3 +358,118 @@ t3_4 <- t3_4 |>
 cor(t3_3$iso_pp_pp, t3_4$iso_branca_branca) # iso's
 cor(t3_1$exp_pp_branca, t3_3$iso_pp_pp)
 cor(t3_2$exp_branca_pp, t3_4$iso_branca_branca)
+
+
+# 4. Changes in the segregation over time ---------------------------------
+
+###
+# 4.1 - Ranking of segregation between years for each capital
+###
+
+# creating table with Entropy index
+t4_1 <- segreg_munic |> 
+  st_drop_geometry() |> 
+  filter(code_tract == "Total") |> 
+  select(year, name_region, name_state, code_muni, name_muni, index_h)
+
+# capitals
+aux_capital <- aux_munic |> 
+  reframe(
+    n_total = sum(n_total),
+    .by = c(name_state, code_muni)
+  ) |> 
+  arrange(name_state, desc(n_total)) |> 
+  mutate(order = row_number(),
+         .by = c(name_state)) |> 
+  filter(order == 1) |> 
+  select(-order, -n_total, -name_state)
+
+# choosing capitals
+
+t4_1 <- t4_1 |> 
+  right_join(
+    aux_capital,
+    by = join_by(code_muni)
+  )
+# create ranking
+t4_1 <- t4_1 |> 
+  arrange(year, desc(index_h)) |> 
+  mutate(order = row_number(),
+         .by = c(year))
+
+# comparing years
+
+t4_1 |> 
+  filter(year == 2010) |> 
+  select(name_region, name_state, name_muni, "H_2010" = index_h, "Ranking_2010" = order) |> 
+  left_join(
+    t4_1 |> 
+      filter(year == 2022) |> 
+      select(name_region, name_state, name_muni, "H_2022" = index_h, "Ranking_2022" = order),
+    by = join_by(name_region, name_state, name_muni)
+  )
+
+###
+# 4.2 - Ranking of segregation between years for each metropolitan region based on RM in 2010
+###
+
+# creating table with Entropy index
+t4_2 <- segreg_metro |> 
+  st_drop_geometry() |> 
+  filter(code_tract == "Total") |> 
+  select(year, name_metro, index_h) |> 
+  left_join(
+    aux_metro_complete,
+    by = join_by(name_metro)
+  ) |> 
+  arrange(desc(index_h)) |> 
+  select(year, name_region, name_state, name_metro, index_h) |> 
+  mutate(name_metro = str_remove(name_metro, "^Rm |RM "))
+
+# rms in both years
+aux_rms <- 
+  reframe(
+    n_total = sum(n_total),
+    .by = c(name_state, code_muni)
+  ) |> 
+  arrange(name_state, desc(n_total)) |> 
+  mutate(order = row_number(),
+         .by = c(name_state)) |> 
+  filter(order == 1) |> 
+  select(-order, -n_total, -name_state)
+
+# choosing capitals
+
+t4_1 <- t4_1 |> 
+  right_join(
+    aux_capital,
+    by = join_by(code_muni)
+  )
+
+# create ranking for comparable RMs
+
+t4_2 <- t4_2 |> 
+  filter(year == 2010) |> 
+  filter(name_metro %in% t4_2$name_metro[t4_2$year == 2022]) |> 
+  select(year, name_region, name_state, name_metro, index_h) |> 
+  bind_rows(
+    t4_2 |> 
+      filter(year == 2022) |> 
+      filter(name_metro %in% t4_2$name_metro[t4_2$year == 2010]) |> 
+      select(year, name_region, name_state, name_metro, index_h)
+  ) |> 
+  arrange(year, desc(index_h)) |> 
+  mutate(order = row_number(),
+         .by = year)
+
+# compare rakings
+
+t4_2 <- t4_2 |> 
+  filter(year == 2010) |> 
+  select(name_region, name_state, name_metro, "H_2010" = index_h, "Ranking_2010" = order) |> 
+  left_join(
+    t4_2 |> 
+      filter(year == 2022) |> 
+      select(name_region, name_state, name_metro, "H_2022" = index_h, "Ranking_2022" = order),
+    by = join_by(name_region, name_state, name_metro)
+  )
