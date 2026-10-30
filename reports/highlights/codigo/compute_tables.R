@@ -200,4 +200,156 @@ rm(capitals,aux_capital)
 
 # 3. Potential racial interaction -----------------------------------------
 
+###
+# 3.1 - Municipalities ranking by residential interaction between Negros x Brancos
+###
+# Note: excluding municipalities with less than 3 racial categories, with more than one census tract,
+# with low Variance Coefficient, and with not a large share of census tract with missing by race group
 
+t3_1 <- segreg_munic |> 
+  st_drop_geometry() |> 
+  filter(code_tract == "Total", year == 2022) |> 
+  select(name_region, name_state, code_muni, name_muni, exp_pp_branca)
+
+# excluding municipalities
+
+munic_keep <- aux_evaluation |>
+  filter(year == 2022, valid_tract == "Valid") |> 
+  reframe(
+    missing_branca = mean(missing_branca, na.rm = T),
+    missing_preta = mean(missing_preta, na.rm = T),
+    missing_parda = mean(missing_parda, na.rm = T),
+    avg = mean(heterogeneity_index, na.rm = T),
+    sd = sd(heterogeneity_index, na.rm = T),
+    cv = sd / avg,
+    .by = c(code_muni)
+  )
+
+munic_keep <- munic_keep |> 
+  filter(sd != 0) |>
+  filter(avg >= 3) |>
+  filter(cv <= 0.3) |> 
+  filter(missing_preta < .5)
+
+t3_1 <- t3_1 |> 
+  filter(code_muni %in% munic_keep$code_muni) |> 
+  arrange(desc(exp_pp_branca))
+
+###
+# 3.2 - Municipalities ranking by residential interaction between Brancos x Negros
+###
+# Note: excluding municipalities with less than 3 racial categories, with more than one census tract,
+# with low Variance Coefficient, and with not a large share of census tract with missing by race group
+
+t3_2 <- segreg_munic |> 
+  st_drop_geometry() |> 
+  filter(code_tract == "Total", year == 2022) |> 
+  select(name_region, name_state, code_muni, name_muni, exp_branca_pp)
+
+# excluding municipalities
+
+munic_keep <- aux_evaluation |>
+  filter(year == 2022, valid_tract == "Valid") |> 
+  reframe(
+    missing_branca = mean(missing_branca, na.rm = T),
+    missing_preta = mean(missing_preta, na.rm = T),
+    missing_parda = mean(missing_parda, na.rm = T),
+    avg = mean(heterogeneity_index, na.rm = T),
+    sd = sd(heterogeneity_index, na.rm = T),
+    cv = sd / avg,
+    .by = c(code_muni)
+  )
+
+munic_keep <- munic_keep |> 
+  filter(sd != 0) |>
+  filter(avg >= 3) |>
+  filter(cv <= 0.3) |> 
+  filter(missing_preta < .5)
+
+t3_2 <- t3_2 |> 
+  filter(code_muni %in% munic_keep$code_muni) |> 
+  arrange(desc(exp_branca_pp))
+
+###
+# Correlation between both indicators
+###
+
+cor(t3_1$exp_pp_branca, t3_2$exp_branca_pp)
+
+###
+# 3.3 - Municipalities ranking by residential isolation among Negro
+###
+# Note: excluding municipalities with less than 3 racial categories, with more than one census tract,
+# with low Variance Coefficient, and with not a large share of census tract with missing by race group
+
+t3_3 <- segreg_munic |> 
+  st_drop_geometry() |> 
+  filter(code_tract == "Total", year == 2022) |> 
+  select(name_region, name_state, code_muni, name_muni, iso_pp_pp)
+
+# excluding municipalities
+
+munic_keep <- aux_evaluation |>
+  filter(year == 2022, valid_tract == "Valid") |> 
+  reframe(
+    missing_branca = mean(missing_branca, na.rm = T),
+    missing_preta = mean(missing_preta, na.rm = T),
+    missing_parda = mean(missing_parda, na.rm = T),
+    avg = mean(heterogeneity_index, na.rm = T),
+    sd = sd(heterogeneity_index, na.rm = T),
+    cv = sd / avg,
+    .by = c(code_muni)
+  )
+
+munic_keep <- munic_keep |> 
+  filter(sd != 0) |>
+  filter(avg >= 3) |>
+  filter(cv <= 0.3) |> 
+  filter(missing_preta < .5)
+
+t3_3 <- t3_3 |> 
+  filter(code_muni %in% munic_keep$code_muni) |> 
+  arrange(desc(iso_pp_pp))
+
+###
+# 3.4 - Municipalities ranking by residential isolation among Brancos
+###
+# Note: excluding municipalities with less than 3 racial categories, with more than one census tract,
+# with low Variance Coefficient, and with not a large share of census tract with missing by race group
+
+t3_4 <- segreg_munic |> 
+  st_drop_geometry() |> 
+  filter(code_tract == "Total", year == 2022) |> 
+  select(name_region, name_state, code_muni, name_muni, iso_branca_branca)
+
+# excluding municipalities
+
+munic_keep <- aux_evaluation |>
+  filter(year == 2022, valid_tract == "Valid") |> 
+  reframe(
+    missing_branca = mean(missing_branca, na.rm = T),
+    missing_preta = mean(missing_preta, na.rm = T),
+    missing_parda = mean(missing_parda, na.rm = T),
+    avg = mean(heterogeneity_index, na.rm = T),
+    sd = sd(heterogeneity_index, na.rm = T),
+    cv = sd / avg,
+    .by = c(code_muni)
+  )
+
+munic_keep <- munic_keep |> 
+  filter(sd != 0) |>
+  filter(avg >= 3) |>
+  filter(cv <= 0.3) |> 
+  filter(missing_preta < .5)
+
+t3_4 <- t3_4 |> 
+  filter(code_muni %in% munic_keep$code_muni) |> 
+  arrange(desc(iso_branca_branca))
+
+###
+# Correlation between both indicators
+###
+
+cor(t3_3$iso_pp_pp, t3_4$iso_branca_branca) # iso's
+cor(t3_1$exp_pp_branca, t3_3$iso_pp_pp)
+cor(t3_2$exp_branca_pp, t3_4$iso_branca_branca)
