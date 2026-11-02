@@ -427,7 +427,7 @@ t4_2 <- segreg_metro |>
   mutate(name_metro = str_remove(name_metro, "^Rm |RM "))
 
 # rms in both years
-aux_rms <- 
+aux_rms <- aux_munic |> 
   reframe(
     n_total = sum(n_total),
     .by = c(name_state, code_muni)
