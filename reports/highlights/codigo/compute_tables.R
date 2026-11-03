@@ -80,6 +80,57 @@ t1 <- segreg_metro |>
   select(name_region, name_state, name_metro, dissimilarity) |> 
   arrange(desc(dissimilarity))
 
+# distribution of regions
+t1 |> 
+  summarise(
+    n = n_distinct(name_metro),
+    .by = name_region
+  ) |> 
+  mutate(perc = n / sum(n)*100)
+
+# 20 most segregated RMs by region
+t1 |> 
+  mutate(order = row_number()) |> 
+  filter(order <= 20) |> 
+  summarise(
+    n = n_distinct(name_metro),
+    .by = name_region
+  ) |> 
+  mutate(perc = n / sum(n)*100)
+
+# 20 most segregated RMs by states
+t1 |> 
+  mutate(order = row_number()) |> 
+  filter(order <= 20) |> 
+  summarise(
+    n = n_distinct(name_metro),
+    .by = name_state
+  ) |> 
+  mutate(perc = n / sum(n)*100)
+
+# 20 less segregated RMs by region
+t1 |> 
+  mutate(order = row_number()) |> 
+  filter(order >= 54) |> 
+  summarise(
+    n = n_distinct(name_metro),
+    .by = name_region
+  ) |> 
+  mutate(perc = n / sum(n)*100)
+
+segreg_metro |> 
+  st_drop_geometry() |>
+  filter(code_tract == "Total", year == 2022) |>
+  filter(name_metro %in% t1$name_metro) |> 
+  select(name_metro, percent_preta_ou_parda) |> 
+  right_join(
+    t1,
+    by = join_by(name_metro)
+  ) |> 
+  ggplot() +
+  aes(x = percent_preta_ou_parda, y = dissimilarity, color = name_region) +
+  geom_point(alpha = .5, size = 5) +
+  theme_minimal()
 
 # 2. Municipalities -------------------------------------------------------
 
