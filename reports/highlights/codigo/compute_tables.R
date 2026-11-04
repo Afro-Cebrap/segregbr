@@ -80,6 +80,8 @@ t1 <- segreg_metro |>
   select(name_region, name_state, name_metro, dissimilarity) |> 
   arrange(desc(dissimilarity))
 
+clipr::write_clip(t1)
+
 # distribution of regions
 t1 |> 
   summarise(
@@ -132,13 +134,26 @@ segreg_metro |>
   geom_point(alpha = .5, size = 5) +
   theme_minimal()
 
+segreg_metro |> 
+  st_drop_geometry() |>
+  filter(code_tract == "Total", year == 2022) |>
+  filter(name_metro %in% t1$name_metro) |> 
+  select(name_metro, percent_preta_ou_parda) |> 
+  right_join(
+    t1,
+    by = join_by(name_metro)
+  ) |> 
+  arrange(desc(dissimilarity))
+
+clipr::write_last_clip()
+
 # 2. Municipalities -------------------------------------------------------
 
 ###
 # 2.1 - Municipalities most and lest segregated
 ###
 # Note: excluding municipalities with less than 3 racial categories, with more than one census tract,
-# and with low Variance Coefficient
+# with low Variance Coefficient, and low presence of Negros (< .1)
 
 t2_1 <- segreg_munic |> 
   st_drop_geometry() |> 
@@ -163,8 +178,38 @@ munic_keep <- munic_keep |>
 
 t2_1 <- t2_1 |> 
   filter(code_muni %in% munic_keep$code_muni) |> 
+  # adding race distribution
+  left_join(
+    segreg_munic |> 
+      st_drop_geometry() |>
+      filter(code_tract == "Total", year == 2022) |>
+      filter(code_muni %in% t2_1$code_muni) |> 
+      select(code_muni, percent_preta_ou_parda, n_total),
+    by = join_by(code_muni)
+  ) |> 
+  # drop munic with less than 10% of Negros
+  filter(percent_preta_ou_parda >= .1) |> 
   arrange(desc(dissimilarity))
 
+# adding race distribution
+t2_1
+
+t2_1 |> 
+  ggplot() +
+  aes(x = percent_preta_ou_parda, y = dissimilarity, color = name_region) +
+  geom_point(alpha = .2, size = 2) +
+  theme_minimal()
+
+# focus on cities bigger than 100K of people
+t2_1 |> 
+  filter(n_total >= 100000) |> 
+  arrange(dissimilarity)
+
+t2_1 |> 
+  filter(n_total >= 100000) |> 
+  arrange(desc(dissimilarity))
+
+clipr::write_last_clip()
 ####
 # 2.2. Spatial correlation - LISA and Moran
 ####
@@ -206,6 +251,12 @@ t2_2 |>
     axis.ticks = element_blank(),
     panel.grid = element_line(color = "#ffffff",linewidth = .01),
     panel.background = element_blank())
+
+# results from LISA
+
+t2_2 |> 
+  st_drop_geometry() |> 
+  filter(name_state == "Minas Gerais",LISA_map == "Baixo-Baixo")
 
 ####
 # 2.3. Neighbors with the highest spatial segregation
@@ -253,6 +304,11 @@ t2_3 <- segreg_munic |>
   arrange(desc(dissimilarity_muni))
 
 rm(capitals,aux_capital)
+
+t2_3 |> 
+  select(name_region, name_state, name_muni, name_neighborhood, dissimilarity_muni)
+
+clipr::write_last_clip()
 
 # 3. Potential racial interaction -----------------------------------------
 
