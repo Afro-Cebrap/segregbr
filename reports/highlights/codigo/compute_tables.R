@@ -15,6 +15,10 @@ library(sfarrow) # For reading and writing spatial data in Parquet format
 library(sf) # For working with sf objects
 library(spdep) # For spatial analysis with neighbor matrix
 library(rgeoda) # For spatial analysis, constructing neighbor matrix
+library(ggspatial) # elements for maps
+library(ggrepel) # for adding labels to the map
+library(glue)
+library(forcats)
 
 # Custom auxiliary functions
 source(here::here("reports","highlights","codigo","utils_analysis.R"))
@@ -217,40 +221,167 @@ clipr::write_last_clip()
 # Creating dataset
 
 df_spatial <- segreg_munic |> 
-  filter(code_tract == "Total", year == 2022, code_muni %in% t2_1$code_muni) |> 
-  select(name_region, name_state, code_muni, name_muni, dissimilarity)
+  filter(code_tract == "Total", year == 2022) |> 
+  select(name_region, name_state, code_muni, name_muni, dissimilarity) |> 
+  st_make_valid() |> 
+  st_transform(5880) # sirgas 2000
+
+df_lisa <- df_spatial |> 
+  filter(code_muni %in% t2_1$code_muni)
 
 # LISA
 
-t2_2 <- compute_lisa(df_spatial)
+t2_2 <- compute_lisa(df_lisa)
 
 # idea to plot map
-t2_2 |> 
-  ggplot() +
-  geom_sf(aes(fill = LISA_map),
-          lwd = 0) +
-  geom_sf(fill = "transparent",
-          colour = "grey90", size = 0.2) +
+
+# order for legends and colors
+niveis <- c("Alto-Alto", "Alto-Baixo", "Baixo-Alto", "Baixo-Baixo", "Não significativo")
+cores  <- c(
+  "Alto-Alto"         = "#a50f15",
+  "Alto-Baixo"        = "#fc9272",
+  "Baixo-Alto"        = "#a6bddb",
+  "Baixo-Baixo"       = "#045a8d",
+  "Não significativo" = "#f0f0f0"
+)
+
+mapa <- t2_2 |>
+  mutate(LISA_map = factor(LISA_map, levels = niveis))
+
+# geometry simplification
+mapa <- st_simplify(mapa, dTolerance = 500, preserveTopology = TRUE)
+
+# boundaries for states and br
+estados <- geobr::read_state(year = 2022) |> 
+  st_make_valid() |> 
+  st_transform(5880) |> # sirgas 2000
+  st_simplify(dTolerance = 500, preserveTopology = TRUE)
+
+brasil <- st_union(estados)
+
+# legend with counting
+contagem <- mapa |>
+  st_drop_geometry() |>
+  count(LISA_map, .drop = FALSE) |>
+  mutate(rotulo = glue("{LISA_map} (n = {format(n, big.mark = '.')})"))
+
+rotulos <- setNames(contagem$rotulo, contagem$LISA_map)
+
+# adding labels with names of each state
+labels_uf <- estados |>
+  st_cast("POLYGON", warn = FALSE) |>
+  mutate(area = st_area(geometry)) |>
+  group_by(name_state) |>
+  slice_max(area, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(geometry = st_point_on_surface(geometry)) 
+
+labels_uf$X <- st_coordinates(labels_uf)[, 1]
+labels_uf$Y <- st_coordinates(labels_uf)[, 2]
+
+# creating map
+
+p <- ggplot() +
+  # municipios total
+  geom_sf(data = df_spatial, fill = NA, colour = "grey90", linewidth = 0.15) +
+  # municípios: sem borda (5.570 linhas poluem a escala nacional)
+  geom_sf(data = mapa, aes(fill = LISA_map), colour = NA) +
+  # estados
+  geom_sf(data = estados, fill = NA, colour = "grey25", linewidth = 0.25) +
+  # contorno do Brasil
+  geom_sf(data = brasil, fill = NA, colour = "black", linewidth = 0.6) +
   scale_fill_manual(
-    values = c(
-      "Baixo-Baixo" = "#045a8d", "Alto-Baixo" = "#a6bddb","Baixo-Alto" = "#fc9272",
-      "Alto-Alto" = "#a50f15","Não significativo" =  "#f0f0f0"
-    )) +
-  guides(fill = guide_legend(title = glue::glue("LISA Map"))) +
-  labs(
-    caption = glue::glue("Fonte: IBGE, Censo Demográfico 2022.")
+    values = cores,
+    labels = rotulos,
+    drop   = FALSE,
+    name   = "Agrupamento LISA"
   ) +
-  # tira sistema cartesiano
+  geom_text_repel(
+    data = labels_uf,
+    aes(x = X, y = Y, label = abbrev_state),
+    size = 3.2, fontface = "bold", colour = "grey10",
+    bg.color = "white", bg.r = 0.15,          # halo branco: legível sobre qualquer cor
+    min.segment.length = 0.3,                 # linha só quando o rótulo é deslocado
+    segment.colour = "grey30", segment.size = 0.25,
+    box.padding = 0.15, point.size = NA,
+    max.overlaps = Inf, seed = 123
+  ) +
+  guides(fill = guide_legend(
+    title.position = "top",
+    override.aes = list(colour = "grey40", linewidth = 0.2)
+  )) +
+  # elementos cartográficos
+  annotation_scale(
+    location = "br", width_hint = 0.2, style = "ticks",
+    text_family = "sans", text_cex = 0.8
+  ) +
+  annotation_north_arrow(
+    location = "br", which_north = "true",
+    pad_x = unit(0.4, "cm"), pad_y = unit(1.2, "cm"),
+    height = unit(1.2, "cm"), width = unit(1.2, "cm"),
+    style = north_arrow_minimal(text_size = 8)
+  ) +
+  labs(
+    title    = "Segregação racial nos municípios brasileiros",
+    subtitle = "Autocorrelação espacial local (LISA) do índice de dissimilaridade",
+    caption  = glue(
+      "Fonte: IBGE, Censo Demográfico 2022. Elaboração própria.\n",
+      "Projeção: SIRGAS 2000 / Brazil Polyconic. ",
+      "Agrupamentos com p < 0,10 (999 permutações)."   # ajuste ao limiar que você usou
+    )
+  ) +
+  theme_void(base_size = 12) +
   theme(
-    plot.title = element_text(face = "bold", size = 12, hjust = .5, vjust = .5),
-    plot.caption = element_blank(),
-    legend.title = element_text(face = "bold", size = 12, hjust = 0, vjust = .5),
-    legend.text = element_text(size = 12, hjust = 0, vjust = .9),
-    legend.position = "right",
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    panel.grid = element_line(color = "#ffffff",linewidth = .01),
-    panel.background = element_blank())
+    plot.title      = element_text(face = "bold", size = 15, hjust = 0, margin = margin(b = 3)),
+    plot.subtitle   = element_text(size = 11, colour = "grey30", hjust = 0, margin = margin(b = 10)),
+    plot.caption    = element_text(size = 8.5, colour = "grey40", hjust = 0, lineheight = 1.2,
+                                   margin = margin(t = 10)),
+    plot.margin     = margin(12, 12, 12, 12),
+    legend.title    = element_text(face = "bold", size = 11),
+    legend.text     = element_text(size = 10),
+    legend.key.size = unit(0.5, "cm"),
+    legend.position = "inside",
+    legend.position.inside = c(0.18, 0.22),     # canto inferior esquerdo, área vazia do mapa
+    legend.background = element_rect(fill = alpha("white", 0.85), colour = NA),
+    plot.background = element_rect(fill = "white", colour = NA)
+  )
+
+p
+
+# export it
+
+ggsave(p,
+       path = file.path("reports","highlights","output"),
+       filename = "mapa_lisa_dissimilaridade.png",
+       width = 20, height = 20, units = "cm", dpi = 300, bg = "white")
+
+
+# t2_2 |> 
+#   ggplot() +
+#   geom_sf(aes(fill = LISA_map),
+#           lwd = 0) +
+#   geom_sf(fill = "transparent",
+#           colour = "grey90", size = 0.2) +
+#   scale_fill_manual(
+#     values = c(
+#       "Baixo-Baixo" = "#045a8d", "Alto-Baixo" = "#a6bddb","Baixo-Alto" = "#fc9272",
+#       "Alto-Alto" = "#a50f15","Não significativo" =  "#f0f0f0"
+#     )) +
+#   guides(fill = guide_legend(title = glue::glue("LISA Map"))) +
+#   labs(
+#     caption = glue::glue("Fonte: IBGE, Censo Demográfico 2022.")
+#   ) +
+#   # tira sistema cartesiano
+#   theme(
+#     plot.title = element_text(face = "bold", size = 12, hjust = .5, vjust = .5),
+#     plot.caption = element_blank(),
+#     legend.title = element_text(face = "bold", size = 12, hjust = 0, vjust = .5),
+#     legend.text = element_text(size = 12, hjust = 0, vjust = .9),
+#     legend.position = "right",
+#     axis.text = element_blank(),
+#     axis.ticks = element_blank(),
+#     panel.grid = element_line(color = "#ffffff",linewidth = .01),
+#     panel.background = element_blank())
 
 # results from LISA
 
